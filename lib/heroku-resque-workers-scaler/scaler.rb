@@ -7,16 +7,16 @@ module HerokuResqueAutoScale
       @@heroku = Heroku::API.new(api_key: ENV['HEROKU_API_KEY'])
       
       def workers
-        return nil unless authorised? 
+        return nil unless authorized? 
         @@heroku.get_app(ENV['HEROKU_APP_NAME']).body['workers'].to_i
       end
 
       def workers=(qty)
-        return unless authorised?
+        return unless authorized?
         if safe_mode? and down? qty
           return unless safer?
         end
-        @@heroku.post_ps_scale(ENV['HEROKU_APP_NAME'], 'worker', qty.to_s)
+        @@heroku.post_ps_scale(ENV['HEROKU_APP_NAME'], 'worker', qty.to_i)
       end
 
       def job_count
@@ -25,6 +25,10 @@ module HerokuResqueAutoScale
 
       def working_job_count
         Resque.info[:working].to_i
+      end
+         
+      def authorized?
+        HerokuResqueAutoScale::Config.environments.include? Rails.env.to_s
       end
       
       protected
@@ -39,14 +43,7 @@ module HerokuResqueAutoScale
       
       def safer?
         job_count + working_job_count == 0
-      end
-      
-      private
-      
-      def authorised?
-        HerokuResqueAutoScale::Config.environments.include? Rails.env.to_s
-      end
-        
+      end        
     end
   end
 
@@ -59,6 +56,7 @@ module HerokuResqueAutoScale
   end
 
   def after_enqueue_scale_up(*args)
+    return unless Scaler.authorized?
     HerokuResqueAutoScale::Config.thresholds.reverse_each do |scale_info|
       # Run backwards so it gets set to the highest value first
       # Otherwise if there were 70 jobs, it would get set to 1, then 2, then 3, etc
@@ -77,6 +75,7 @@ module HerokuResqueAutoScale
   private
 
   def scale_down
+    return unless Scaler.authorized?
     # Nothing fancy, just shut everything down if we have no pending jobs
     # and one working job (which is this job)
     Scaler.workers = 1 if Scaler.job_count.zero? && Scaler.working_job_count == 1
