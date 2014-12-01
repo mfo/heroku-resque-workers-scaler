@@ -26,6 +26,8 @@ module HerokuResqueAutoScale
       @worker_name ||= config['worker_name']
     end
 
+    attr_accessor :error_reporter
+
     private
 
     def config
