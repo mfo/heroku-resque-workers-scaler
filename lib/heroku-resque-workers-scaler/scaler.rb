@@ -14,7 +14,7 @@ module HerokuResqueAutoScale
         result['quantity']
       rescue Excon::Errors::Error => e
         # api down!
-        Config.error_reporter.call("Heroku API error when getting workers count.", e) if Config.error_reporter
+        Config.error_handler.call("Heroku API error when getting workers count.", e) if Config.error_handler
         -1
       end
 
@@ -35,7 +35,7 @@ module HerokuResqueAutoScale
         result['quantity'] == quantity
       rescue Excon::Errors::Error => e
         # api down!
-        Config.error_reporter.call("Heroku API error when setting workers count.", e) if Config.error_reporter
+        Config.error_handler.call("Heroku API error when setting workers count.", e) if Config.error_handler
         -1
       end
 
@@ -45,7 +45,7 @@ module HerokuResqueAutoScale
         nil
       rescue Excon::Errors::Error => e
         # api down!
-        Config.error_reporter.call("Heroku API error when shutting down workers.", e) if Config.error_reporter
+        Config.error_handler.call("Heroku API error when shutting down workers.", e) if Config.error_handler
         nil
       end
 

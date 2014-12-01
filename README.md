@@ -101,6 +101,14 @@ When you ask heroku for scale down workers, heroku send SIGTERM and wait 4 secon
 ```
 	heroku config:add SAFE_MODE=true -a your_app_name
 ```
+#### Report errors
+
+If a connection error occurs when accessing the Heroku API, the lambda assigned to the `error_handler` config will be called.
+```
+HerokuResqueAutoScale::Config.error_handler = lambda { |message, error|
+  # some custom error handling code here in which you optionally re-raise the error
+}
+```
 ## Contributing to heroku-resque-workers-scaler
 
 * Check out the latest master to make sure the feature hasn't been implemented or the bug hasn't been fixed yet

@@ -26,9 +26,9 @@ module HerokuResqueAutoScale
       @worker_name ||= config['worker_name']
     end
 
-    # A lambda with 2 arguments (message and exception) that will be
+    # A lambda with 2 arguments (message and error) that will be
     # called when a Heroku API connection error occurs
-    attr_accessor :error_reporter
+    attr_accessor :error_handler
 
     private
 
