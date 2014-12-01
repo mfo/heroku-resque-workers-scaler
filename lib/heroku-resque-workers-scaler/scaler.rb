@@ -12,7 +12,7 @@ module HerokuResqueAutoScale
         return -1 unless authorized?
         result = @@heroku.formation.info(app_name, worker_name)
         result['quantity']
-      rescue Excon::Error => e
+      rescue Excon::Errors::Error => e
         # api down!
         Config.error_reporter("Heroku API error when getting workers count.", e) if Config.error_reporter
       end
@@ -32,7 +32,7 @@ module HerokuResqueAutoScale
 
         result = @@heroku.formation.update(app_name, worker_name, { quantity: quantity })
         result['quantity'] == quantity
-      rescue Excon::Error => e
+      rescue Excon::Errors::Error => e
         # api down!
         Config.error_reporter("Heroku API error when setting workers count.", e) if Config.error_reporter
       end
@@ -41,7 +41,7 @@ module HerokuResqueAutoScale
         return unless authorized?
         @@heroku.formation.update(app_name, worker_name, { quantity: 0 })
         nil
-      rescue Excon::Error => e
+      rescue Excon::Errors::Error => e
         # api down!
         Config.error_reporter("Heroku API error when shutting down workers.", e) if Config.error_reporter
       end
