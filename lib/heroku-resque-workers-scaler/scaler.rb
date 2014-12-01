@@ -1,5 +1,6 @@
 require 'platform-api'
 require 'resque'
+require 'excon'
 
 module HerokuResqueAutoScale
   module Scaler
