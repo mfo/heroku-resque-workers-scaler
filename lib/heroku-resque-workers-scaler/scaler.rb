@@ -31,7 +31,7 @@ module HerokuResqueAutoScale
         end
 
         result = @@heroku.formation.update(app_name, worker_name, { quantity: quantity })
-        Resque.redis.setex worker_count_key, quantity, cache_duration
+        Resque.redis.setex worker_count_key, cache_duration, quantity
         result['quantity'] == quantity
       end
 
