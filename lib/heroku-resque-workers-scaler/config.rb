@@ -26,6 +26,14 @@ module HerokuResqueAutoScale
       @worker_name ||= config['worker_name']
     end
 
+    def worker_count_key
+      @worker_count_key ||= config['worker_count_key']
+    end
+
+    def heroku_cache_duration
+      @heroku_cache_duration ||= config['heroku_cache_duration']
+    end
+
     private
 
     def config

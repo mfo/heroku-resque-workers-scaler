@@ -16,3 +16,5 @@ environments:
   - development
 worker_name: worker
 threshold: 100
+worker_count_key: current_worker_count
+heroku_cache_duration: 300

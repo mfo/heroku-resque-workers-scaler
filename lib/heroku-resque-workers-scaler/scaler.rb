@@ -9,8 +9,12 @@ module HerokuResqueAutoScale
 
       def workers
         return -1 unless authorized?
-        result = @@heroku.formation.info(app_name, worker_name)
-        result['quantity']
+        result = Resque.redis.get worker_count_key
+        if result.nil?
+          result = @@heroku.formation.info(app_name, worker_name).fetch('quantity', -1)
+          Resque.redis.setex worker_count_key, cache_duration, result
+        end
+        result.to_i
       end
 
       def workers=(quantity)
@@ -27,12 +31,13 @@ module HerokuResqueAutoScale
         end
 
         result = @@heroku.formation.update(app_name, worker_name, { quantity: quantity })
+        Resque.redis.setex worker_count_key, cache_duration, quantity
         result['quantity'] == quantity
       end
 
       def shut_down_workers!
         return unless authorized?
-        @@heroku.formation.update(app_name, worker_name, { quantity: 0 })
+        @@heroku.formation.update(app_name, worker_name, { quantity: ENV['MIN_WORKERS'].to_i })
         nil
       end
 
@@ -84,6 +89,13 @@ module HerokuResqueAutoScale
         Config.worker_name
       end
 
+      def worker_count_key
+        Config.worker_count_key || 'current_worker_count'
+      end
+
+      def cache_duration
+        Config.heroku_cache_duration || 300
+      end
     end
   end
 
