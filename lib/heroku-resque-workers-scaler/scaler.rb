@@ -126,9 +126,9 @@ module HerokuResqueAutoScale
     when :fit
       Scaler.workers = Scaler.job_count
     when :half
-      Scaler.workers = (Scaler.job_count/2)
+      Scaler.workers = Scaler.job_count < 2 ? 1 : (Scaler.job_count/2)
     when :third
-      Scaler.workers = (Scaler.job_count/3)
+      Scaler.workers = Scaler.job_count < 3 ? 1 : (Scaler.job_count/3)
     end
   end
 
