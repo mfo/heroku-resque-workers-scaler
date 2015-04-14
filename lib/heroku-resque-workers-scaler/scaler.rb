@@ -14,7 +14,7 @@ module HerokuResqueAutoScale
           result = @@heroku.formation.info(app_name, worker_name).fetch('quantity', -1)
           Resque.redis.setex worker_count_key, cache_duration, result
         end
-        result
+        result.to_i
       end
 
       def workers=(quantity)
