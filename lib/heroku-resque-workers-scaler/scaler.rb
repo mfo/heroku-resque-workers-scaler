@@ -3,7 +3,6 @@ require 'resque'
 
 module HerokuResqueAutoScale
   module Scaler
-
     class << self
       @@heroku = PlatformAPI.connect(ENV['HEROKU_API_KEY'])
 
@@ -135,7 +134,6 @@ module HerokuResqueAutoScale
   private
 
   def scale_down
-    return unless Scaler.authorized?
     # Nothing fancy, just shut everything down if we have no pending jobs
     # and one working job (which is this job)
     Scaler.shut_down_workers! if Scaler.job_count.zero? && Scaler.working_job_count <= 1
