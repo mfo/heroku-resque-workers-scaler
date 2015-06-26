@@ -1,71 +1,84 @@
 require 'spec_helper'
 
-# HEROKU_API_KEY=your_api_key HEROKU_APP_NAME=your_app_name bundle exec rake spec
 describe HerokuResqueAutoScale::Scaler do
 
-  context 'authorised' do
-    before { HerokuResqueAutoScale::Scaler.stub authorised?: true }
-    context 'unsafe mode' do
-      before { HerokuResqueAutoScale::Scaler.stub safe_mode?: false }
-  
-      context 'get number of workers' do
+  context 'when authorised' do
+    before { allow(HerokuResqueAutoScale::Scaler).to receive(:authorized?) { true }}
+
+    context 'with safe mode disabled' do
+      before { allow(HerokuResqueAutoScale::Scaler).to receive(:safe_mode?) { false }}
+
+      describe 'get number of workers' do
         before do
-          stub_request(:get, "https://api.heroku.com/apps/your_app_name").
-            with(:headers => {'Accept'=>'application/json', 'Accept-Encoding'=>'gzip', 'Authorization'=>'Basic OnlvdXJfYXBpX2tleQ==', \
-              'Host'=>'api.heroku.com:443', 'User-Agent'=>'heroku-rb/0.3.5', 'X-Ruby-Platform'=>'x86_64-darwin12.2.0', 'X-Ruby-Version'=>'1.9.3'}).
-              to_return(:status => 200, :body => JSON.generate({ workers: '42' }), :headers => {})
+          response_hash = {
+              'command' => 'bundle exec rails server -p $PORT',
+              'created_at' => '2012-01-01T12:00:00Z',
+              'id' => '01234567-89ab-cdef-0123-456789abcdef',
+              'quantity' => 42,
+              'size' => '1X',
+              'type' => 'web',
+              'updated_at' => '2012-01-01T12:00:00Z'
+          }
+          allow_any_instance_of(PlatformAPI::Client).to receive_message_chain(:formation, :info) { response_hash }
         end
-  
-        it { HerokuResqueAutoScale::Scaler.workers.should eql 42 }
+
+        it { expect(HerokuResqueAutoScale::Scaler.workers).to eql(42) }
       end
-  
-      context 'set number of workers' do
+
+      describe 'set number of workers' do
         before do
-          stub_request(:post, "https://api.heroku.com/apps/your_app_name/ps/scale?qty=69&type=worker").
-            with(:headers => {'Accept'=>'application/json', 'Accept-Encoding'=>'gzip', 'Authorization'=>'Basic OnlvdXJfYXBpX2tleQ==', \
-              'Host'=>'api.heroku.com:443', 'User-Agent'=>'heroku-rb/0.3.5', 'X-Ruby-Platform'=>'x86_64-darwin12.2.0', 'X-Ruby-Version'=>'1.9.3'}).
-              to_return(:status => 200, :body => "", :headers => {})
+          response_hash = {
+              'command' => 'bundle exec rails server -p $PORT',
+              'created_at' => '2012-01-01T12:00:00Z',
+              'id' => '01234567-89ab-cdef-0123-456789abcdef',
+              'quantity' => 69,
+              'size' => '1X',
+              'type' => 'web',
+              'updated_at' => '2012-01-01T12:00:00Z'
+          }
+          allow_any_instance_of(PlatformAPI::Client).to receive_message_chain(:formation, :update) { response_hash }
         end
-    
-        it { HerokuResqueAutoScale::Scaler.send(:workers=, '69') }
+
+        it { expect(HerokuResqueAutoScale::Scaler.send(:workers=, 69)).to be_truthy }
       end
-  
-      context 'ask for job and working count' do
-        before { Resque.stub(info: { pending: '16', working: '61' }) }
-    
-        it { HerokuResqueAutoScale::Scaler.job_count.should eql 16 }
-        it { HerokuResqueAutoScale::Scaler.working_job_count.should eql 61 }
+
+      describe 'ask for job and working count' do
+        before { allow(Resque).to receive(:info) {{ pending: '16', working: '61' }} }
+
+        it { expect(HerokuResqueAutoScale::Scaler.job_count).to eql 16 }
+        it { expect(HerokuResqueAutoScale::Scaler.working_job_count).to eql 61 }
       end
     end
-    
-    context 'on safe mode' do
-      before { HerokuResqueAutoScale::Scaler.stub safe_mode?: true }
-      
-      context 'try unsafe action' do
-        before { HerokuResqueAutoScale::Scaler.stub safer?: false, down?: true }
-        
-        describe 'should not trigger action' do
-          
-          it { HerokuResqueAutoScale::Scaler.send(:workers=, '69').should be_nil } # Webmock do nothing here
+
+    context 'with safe mode enabled' do
+      before { allow(HerokuResqueAutoScale::Scaler).to receive(:safe_mode?) { true }}
+
+      context 'when about to scale down' do
+        before { allow(HerokuResqueAutoScale::Scaler).to receive(:scale_down?) { true }}
+
+        context 'when there are some jobs left to process' do
+          before { allow(HerokuResqueAutoScale::Scaler).to receive(:all_jobs_have_been_processed?) { false }}
+
+          # it 'does not trigger the API call' do
+          #   allow_any_instance_of(PlatformAPI::Client).to_not receive(:formation)
+          #   HerokuResqueAutoScale::Scaler.send(:workers=, '69')
+          # end
         end
-      end
-      
-      context 'try safe action' do
-        before { HerokuResqueAutoScale::Scaler.stub safer?: true, down?: true }
-        
-        describe 'should not trigger action' do
-          before do
-            stub_request(:post, "https://api.heroku.com/apps/your_app_name/ps/scale?qty=69&type=worker").
-              with(:headers => {'Accept'=>'application/json', 'Accept-Encoding'=>'gzip', 'Authorization'=>'Basic OnlvdXJfYXBpX2tleQ==', \
-                'Host'=>'api.heroku.com:443', 'User-Agent'=>'heroku-rb/0.3.5', 'X-Ruby-Platform'=>'x86_64-darwin12.2.0', 'X-Ruby-Version'=>'1.9.3'}).
-                to_return(:status => 200, :body => "", :headers => {})
+
+        context 'when there are no jobs left to process' do
+          before { allow(HerokuResqueAutoScale::Scaler).to receive(:all_jobs_have_been_processed?) { true }}
+
+          describe 'should trigger action' do
+            it 'does not trigger the API call' do
+              mock_client = double(PlatformAPI::Client).as_null_object
+              allow_any_instance_of(PlatformAPI::Client).to receive(:formation) { mock_client }
+              HerokuResqueAutoScale::Scaler.send(:workers=, '69')
+            end
           end
-          
-          it { HerokuResqueAutoScale::Scaler.send(:workers=, '69') }
         end
       end
-      
+
     end
   end
-  
+
 end

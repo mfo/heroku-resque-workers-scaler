@@ -1,12 +1,15 @@
-$:.unshift File.expand_path('..', __FILE__)
-$:.unshift File.expand_path('../../lib', __FILE__)
-
-require 'rspec'
-require 'webmock/rspec'
 require 'heroku-resque-workers-scaler'
-require 'json'
+require 'bundler/setup'
+
 require 'resque'
-require 'rails'
+require 'coveralls'
+
+begin
+  require 'pry'
+rescue LoadError
+end
+
+Coveralls.wear!
 
 RSpec.configure do |config|
   config.mock_with :rspec

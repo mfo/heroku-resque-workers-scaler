@@ -1,22 +1,44 @@
-require 'heroku-api'
+require 'platform-api'
+require 'resque'
 
 module HerokuResqueAutoScale
   module Scaler
-    
+
     class << self
-      @@heroku = Heroku::API.new(api_key: ENV['HEROKU_API_KEY'])
-      
+      @@heroku = PlatformAPI.connect(ENV['HEROKU_API_KEY'])
+
       def workers
-        return nil unless authorized? 
-        @@heroku.get_app(ENV['HEROKU_APP_NAME']).body['workers'].to_i
+        return -1 unless authorized?
+        result = Resque.redis.get worker_count_key
+        if result.nil?
+          result = @@heroku.formation.info(app_name, worker_name).fetch('quantity', -1)
+          Resque.redis.setex worker_count_key, cache_duration, result
+        end
+        result.to_i
       end
 
-      def workers=(qty)
+      def workers=(quantity)
         return unless authorized?
-        if safe_mode? and down? qty
-          return unless safer?
+
+        quantity = quantity.to_i
+
+        if safe_mode?
+          if scale_down? quantity
+            return false unless all_jobs_have_been_processed?
+          else
+            return false if too_many_workers_asked?(quantity)
+          end
         end
-        @@heroku.post_ps_scale(ENV['HEROKU_APP_NAME'], 'worker', qty.to_i)
+
+        result = @@heroku.formation.update(app_name, worker_name, { quantity: quantity })
+        Resque.redis.setex worker_count_key, cache_duration, quantity
+        result['quantity'] == quantity
+      end
+
+      def shut_down_workers!
+        return unless authorized?
+        @@heroku.formation.update(app_name, worker_name, { quantity: (ENV['MIN_WORKERS'] || 1).to_i })
+        nil
       end
 
       def job_count
@@ -26,24 +48,54 @@ module HerokuResqueAutoScale
       def working_job_count
         Resque.info[:working].to_i
       end
-         
-      def authorized?
-        HerokuResqueAutoScale::Config.environments.include? Rails.env.to_s
-      end
-      
+
       protected
-      
-      def down? qty
-        qty < workers 
+
+      def app_name
+        ENV['HEROKU_APP_NAME']
       end
-      
+
+      def scale_down? quantity
+        quantity < workers
+      end
+
+      def too_many_workers_asked? quantity
+        quantity >= Config.threshold
+      end
+
       def safe_mode?
         ENV['SAFE_MODE'] and ENV['SAFE_MODE'] == 'true'
       end
-      
-      def safer?
+
+      def all_jobs_have_been_processed?
         job_count + working_job_count == 0
-      end        
+      end
+
+      private
+
+      def authorized?
+        Config.environments.include? _environment
+      end
+
+      def _environment
+        if defined?(Rails)
+          Rails.env.to_s
+        else
+          ENV['ENVIRONMENT'] || 'test'
+        end
+      end
+
+      def worker_name
+        Config.worker_name
+      end
+
+      def worker_count_key
+        Config.worker_count_key || 'current_worker_count'
+      end
+
+      def cache_duration
+        Config.heroku_cache_duration || 300
+      end
     end
   end
 
@@ -56,28 +108,36 @@ module HerokuResqueAutoScale
   end
 
   def after_enqueue_scale_up(*args)
-    return unless Scaler.authorized?
-    HerokuResqueAutoScale::Config.thresholds.reverse_each do |scale_info|
-      # Run backwards so it gets set to the highest value first
-      # Otherwise if there were 70 jobs, it would get set to 1, then 2, then 3, etc
+    case Config.mode
+    when :thresholds
+      Config.thresholds.reverse_each do |scale_info|
+        # Run backwards so it gets set to the highest value first
+        # Otherwise if there were 70 jobs, it would get set to 1, then 2, then 3, etc
 
-      # If we have a job count greater than or equal to the job limit for this scale info
-      if Scaler.job_count >= scale_info[:job_count]
-        # Set the number of workers unless they are already set to a level we want. Don't scale down here!
-        if Scaler.workers <= scale_info[:workers]
-          Scaler.workers = scale_info[:workers]
+        # If we have a job count greater than or equal to the job limit for this scale info
+        if Scaler.job_count >= scale_info[:job_count]
+          # Set the number of workers unless they are already set to a level we want. Don't scale down here!
+          if Scaler.workers <= scale_info[:workers]
+            Scaler.workers = scale_info[:workers]
+          end
+          break # We've set or ensured that the worker count is high enough
         end
-        break # We've set or ensured that the worker count is high enough
       end
+    when :fit
+      Scaler.workers = Scaler.job_count
+    when :half
+      Scaler.workers = (Scaler.job_count/2)
+    when :third
+      Scaler.workers = (Scaler.job_count/3)
     end
   end
-  
+
   private
 
   def scale_down
     return unless Scaler.authorized?
     # Nothing fancy, just shut everything down if we have no pending jobs
     # and one working job (which is this job)
-    Scaler.workers = 1 if Scaler.job_count.zero? && Scaler.working_job_count == 1
+    Scaler.shut_down_workers! if Scaler.job_count.zero? && Scaler.working_job_count <= 1
   end
 end
