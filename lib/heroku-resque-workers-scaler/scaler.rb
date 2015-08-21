@@ -1,5 +1,6 @@
 require 'platform-api'
 require 'resque'
+require 'excon'
 
 module HerokuResqueAutoScale
   module Scaler
@@ -14,6 +15,10 @@ module HerokuResqueAutoScale
           Resque.redis.setex worker_count_key, cache_duration, result
         end
         result.to_i
+      rescue Excon::Errors::Error => e
+        # api down!
+        Config.error_handler.call("Heroku API error when getting workers count.", e) if Config.error_handler
+        -1
       end
 
       def workers=(quantity)
@@ -32,11 +37,19 @@ module HerokuResqueAutoScale
         result = @@heroku.formation.update(app_name, worker_name, { quantity: quantity })
         Resque.redis.setex worker_count_key, cache_duration, quantity
         result['quantity'] == quantity
+      rescue Excon::Errors::Error => e
+        # api down!
+        Config.error_handler.call("Heroku API error when setting workers count.", e) if Config.error_handler
+        -1
       end
 
       def shut_down_workers!
         return unless authorized?
         @@heroku.formation.update(app_name, worker_name, { quantity: (ENV['MIN_WORKERS'] || 1).to_i })
+        nil
+      rescue Excon::Errors::Error => e
+        # api down!
+        Config.error_handler.call("Heroku API error when shutting down workers.", e) if Config.error_handler
         nil
       end
 

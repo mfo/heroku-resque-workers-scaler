@@ -34,6 +34,10 @@ module HerokuResqueAutoScale
       @heroku_cache_duration ||= config['heroku_cache_duration']
     end
 
+    # A lambda with 2 arguments (message and error) that will be
+    # called when a Heroku API connection error occurs
+    attr_accessor :error_handler
+
     private
 
     def config
