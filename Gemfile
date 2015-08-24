@@ -5,5 +5,5 @@ gemspec
 
 group :test do
   gem 'coveralls', require: false
-  gem 'pry'
+  gem 'pry', require: false
 end
